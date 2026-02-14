@@ -1,0 +1,21 @@
+# Terraform/OpenTofu local state and cache
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# Local variable files with secrets
+terraform.tfvars
+*.auto.tfvars
+
+# Plan files
+*.tfplan
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Local overrides
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
