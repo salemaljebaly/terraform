@@ -1,0 +1,15 @@
+hcloud_token      = "replace-with-your-token"
+ssh_key_name      = "replace-with-existing-ssh-key-name"
+ssh_allowed_cidrs = ["203.0.113.10/32"]
+
+# Optional overrides
+# location                = "nbg1"
+# project_name            = "hetzner-private-lb-nat"
+# server_type             = "cx23"
+# nat_gateway_server_type = "cx23"
+# network_cidr            = "10.42.0.0/16"
+# public_subnet_cidr      = "10.42.10.0/24"
+# private_subnet_cidr     = "10.42.20.0/24"
+# network_gateway_ip      = "10.42.0.1"
+# lb_private_ip           = "10.42.20.10"
+# nat_gateway_private_ip  = "10.42.20.2"
