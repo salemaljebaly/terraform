@@ -1,0 +1,13 @@
+config:
+  yugabyte-hetzner-k8s:clusterName: yugabyte-hetzner-k8s-dev
+  yugabyte-hetzner-k8s:location: nbg1
+  yugabyte-hetzner-k8s:networkZone: eu-central
+  yugabyte-hetzner-k8s:masterServerType: cax21
+  yugabyte-hetzner-k8s:workerServerType: cax11
+  yugabyte-hetzner-k8s:workerCount: 3
+  yugabyte-hetzner-k8s:workerMinCount: 3
+  yugabyte-hetzner-k8s:workerMaxCount: 10
+  yugabyte-hetzner-k8s:k3sVersion: v1.34.1+k3s1
+  yugabyte-hetzner-k8s:sshPublicKeyPath: ~/.ssh/id_ed25519.pub
+  yugabyte-hetzner-k8s:sshAllowedCidr: 203.0.113.10/32
+  yugabyte-hetzner-k8s:k8sApiAllowedCidr: 203.0.113.10/32

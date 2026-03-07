@@ -1,0 +1,45 @@
+#!/bin/bash
+set -euo pipefail
+
+echo "==> [worker] Joining K3s cluster..."
+
+export DEBIAN_FRONTEND=noninteractive
+
+for i in $(seq 1 10); do
+  apt-get -o Acquire::ForceIPv4=true update -q && break
+  echo "apt-get update failed (attempt $i), retrying in 5s..."
+  sleep 5
+done
+apt-get -o Acquire::ForceIPv4=true install -y -q curl
+
+# Registry mirror — must match master config
+mkdir -p /etc/rancher/k3s
+cat >/etc/rancher/k3s/registries.yaml <<EOF
+mirrors:
+  "registry.k8s.io":
+    endpoint:
+      - "http://__MASTER_IP__:5000"
+      - "https://registry.k8s.io"
+EOF
+
+# Detect private network interface
+PRIVATE_IP=$(ip -4 addr | awk '/inet 10\.0\./{print $2}' | cut -d/ -f1 | head -1)
+PRIVATE_IFACE=$(ip -4 route | awk '/10\.0\./{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}')
+
+echo "==> Private IP: $PRIVATE_IP | Interface: $PRIVATE_IFACE"
+
+# Wait for master K3s API to be available
+echo "==> Waiting for master API at __MASTER_IP__:6443..."
+timeout 300 bash -c "until curl -sk https://__MASTER_IP__:6443/ping 2>/dev/null; do sleep 5; done"
+
+# Join K3s cluster as agent
+curl -sfL https://get.k3s.io | \
+  INSTALL_K3S_VERSION="__K3S_VERSION__" \
+  K3S_URL="https://__MASTER_IP__:6443" \
+  K3S_TOKEN="__K3S_TOKEN__" \
+  sh -s - agent \
+  --kubelet-arg="cloud-provider=external" \
+  --node-ip="$PRIVATE_IP" \
+  --flannel-iface="$PRIVATE_IFACE"
+
+echo "==> Worker joined cluster __CLUSTER_NAME__ successfully!"
