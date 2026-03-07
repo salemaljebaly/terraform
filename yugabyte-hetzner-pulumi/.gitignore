@@ -1,0 +1,9 @@
+node_modules/
+bin/
+.pulumi/
+.env
+.env.*
+!.env.example
+Pulumi.*.yaml
+!Pulumi.example.yaml
+!pnpm-lock.yaml

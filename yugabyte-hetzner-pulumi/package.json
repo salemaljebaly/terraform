@@ -1,0 +1,33 @@
+{
+  "name": "yugabyte-hetzner-pulumi",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Scalable YugabyteDB cluster on Hetzner Cloud with Pulumi TypeScript",
+  "main": "index.ts",
+  "packageManager": "pnpm@10.30.1",
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "preview": "pulumi preview",
+    "up": "pulumi up",
+    "destroy": "pulumi destroy",
+    "outputs": "pulumi stack output"
+  },
+  "keywords": [
+    "pulumi",
+    "hetzner",
+    "yugabytedb",
+    "devops"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@pulumi/hcloud": "^1.32.1",
+    "@pulumi/pulumi": "^3.224.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
