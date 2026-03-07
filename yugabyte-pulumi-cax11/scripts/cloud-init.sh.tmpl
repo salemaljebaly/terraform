@@ -1,0 +1,114 @@
+#cloud-config
+apt:
+  conf: |
+    Acquire::ForceIPv4 "true";
+
+# Transparent hugepages must be set on every boot (not a sysctl, lives in /sys).
+bootcmd:
+  - echo always > /sys/kernel/mm/transparent_hugepage/enabled
+  - echo always > /sys/kernel/mm/transparent_hugepage/defrag
+
+write_files:
+  - path: /etc/sysctl.d/99-yugabytedb.conf
+    content: |
+      vm.swappiness = 0
+      vm.max_map_count = 262144
+
+runcmd:
+  - timedatectl set-timezone UTC
+  - sysctl --load /etc/sysctl.d/99-yugabytedb.conf
+  - |
+    set -eux
+    export DEBIAN_FRONTEND=noninteractive
+    resolvectl dns eth0 1.1.1.1 8.8.8.8 || true
+    resolvectl domain eth0 "~." || true
+    retries=0
+    until apt-get -o Acquire::ForceIPv4=true update; do
+      retries=$((retries + 1))
+      if [ "$retries" -ge 20 ]; then
+        echo "apt-get update failed after ${retries} attempts" >&2
+        exit 1
+      fi
+      sleep 5
+    done
+    retries=0
+    until apt-get -o Acquire::ForceIPv4=true install -y ca-certificates curl jq tar xz-utils chrony postgresql-client; do
+      retries=$((retries + 1))
+      if [ "$retries" -ge 20 ]; then
+        echo "apt-get install failed after ${retries} attempts" >&2
+        exit 1
+      fi
+      sleep 5
+    done
+    systemctl enable --now chrony
+    id -u yugabyte >/dev/null 2>&1 || useradd -m -s /bin/bash yugabyte
+    install -d -o yugabyte -g yugabyte /home/yugabyte/yb-data
+    install -d /opt
+    for i in $(seq 1 20); do
+      if curl -fsSL "__YB_DOWNLOAD_URL__" -o /tmp/yugabyte.tar.gz; then
+        break
+      fi
+      echo "Yugabyte download failed (attempt ${i}/20); retrying in 5s..." >&2
+      sleep 5
+    done
+    test -s /tmp/yugabyte.tar.gz
+    extracted="$(tar -tzf /tmp/yugabyte.tar.gz | head -1 | cut -d/ -f1)"
+    tar -xzf /tmp/yugabyte.tar.gz -C /opt
+    ln -sfn "/opt/${extracted}" /opt/yugabyte
+    chown -R yugabyte:yugabyte "/opt/${extracted}" /opt/yugabyte /home/yugabyte
+    cat >/etc/yugabyte-node.env <<'EOF'
+    NODE_IP=__NODE_IP__
+    JOIN_IP=__JOIN_IP__
+    CLOUD_LOCATION=__CLOUD_LOCATION__
+    BASE_DIR=/home/yugabyte/yb-data
+    EOF
+    cat >/usr/local/bin/start-yugabyte-node.sh <<'EOF'
+    #!/usr/bin/env bash
+    set -euo pipefail
+    source /etc/yugabyte-node.env
+    join_args=()
+    if [[ -n "${JOIN_IP}" ]]; then
+      for i in $(seq 1 60); do
+        if timeout 1 bash -c "cat < /dev/null > /dev/tcp/${JOIN_IP}/7100" 2>/dev/null; then
+          break
+        fi
+        sleep 2
+      done
+      join_args=(--join="${JOIN_IP}")
+    fi
+    sudo -u yugabyte /opt/yugabyte/bin/yugabyted start \
+      --advertise_address="${NODE_IP}" \
+      --base_dir="${BASE_DIR}" \
+      --cloud_location="${CLOUD_LOCATION}" \
+      --fault_tolerance=zone \
+      "${join_args[@]}"
+    EOF
+    chmod +x /usr/local/bin/start-yugabyte-node.sh
+    cat >/etc/systemd/system/yugabyted.service <<'EOF'
+    [Unit]
+    Description=YugabyteDB Node
+    After=network-online.target
+    Wants=network-online.target
+
+    [Service]
+    Type=oneshot
+    RemainAfterExit=yes
+    ExecStart=/usr/local/bin/start-yugabyte-node.sh
+    ExecStop=/opt/yugabyte/bin/yugabyted stop --base_dir=/home/yugabyte/yb-data
+    Restart=on-failure
+    RestartSec=15
+    TimeoutStartSec=360
+    TimeoutStopSec=120
+    LimitNOFILE=1048576
+    LimitNPROC=12000
+    LimitFSIZE=infinity
+    LimitCPU=infinity
+    LimitAS=infinity
+    LimitMEMLOCK=65536
+    LimitSTACK=8388608
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+    systemctl daemon-reload
+    systemctl enable --now yugabyted

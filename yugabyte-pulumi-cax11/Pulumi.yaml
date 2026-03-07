@@ -1,0 +1,23 @@
+name: yugabyte-pulumi-cax11
+runtime:
+  name: nodejs
+  options:
+    typescript: true
+description: Minimal-cost YugabyteDB test cluster on Hetzner Cloud with Pulumi TypeScript
+backend:
+  url: file://~
+config:
+  yugabyte-pulumi-cax11:location:
+    default: nbg1
+  yugabyte-pulumi-cax11:networkZone:
+    default: eu-central
+  yugabyte-pulumi-cax11:serverType:
+    default: cax11
+  yugabyte-pulumi-cax11:image:
+    default: ubuntu-24.04
+  yugabyte-pulumi-cax11:nodeCount:
+    default: 3
+  yugabyte-pulumi-cax11:networkCidr:
+    default: 10.30.0.0/16
+  yugabyte-pulumi-cax11:subnetCidr:
+    default: 10.30.1.0/24
