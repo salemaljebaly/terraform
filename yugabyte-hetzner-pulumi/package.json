@@ -1,8 +1,8 @@
 {
-  "name": "yugabyte-pulumi-cax11",
+  "name": "yugabyte-hetzner-pulumi",
   "version": "1.0.0",
   "private": true,
-  "description": "Pulumi TypeScript project for a minimal-cost 3-node YugabyteDB cluster on Hetzner Cloud",
+  "description": "Scalable YugabyteDB cluster on Hetzner Cloud with Pulumi TypeScript",
   "main": "index.ts",
   "packageManager": "pnpm@10.30.1",
   "scripts": {

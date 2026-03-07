@@ -1,0 +1,23 @@
+name: yugabyte-hetzner-pulumi
+runtime:
+  name: nodejs
+  options:
+    typescript: true
+description: Scalable YugabyteDB cluster on Hetzner Cloud with Pulumi TypeScript
+backend:
+  url: file://~
+config:
+  yugabyte-hetzner-pulumi:location:
+    default: nbg1
+  yugabyte-hetzner-pulumi:networkZone:
+    default: eu-central
+  yugabyte-hetzner-pulumi:serverType:
+    default: cax11
+  yugabyte-hetzner-pulumi:image:
+    default: ubuntu-24.04
+  yugabyte-hetzner-pulumi:nodeCount:
+    default: 3
+  yugabyte-hetzner-pulumi:networkCidr:
+    default: 10.30.0.0/16
+  yugabyte-hetzner-pulumi:subnetCidr:
+    default: 10.30.1.0/24

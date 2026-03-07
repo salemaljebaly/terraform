@@ -20,7 +20,7 @@ This is a cost-focused environment. Default uses `CAX11` ARM servers (~€3.79/m
 ## 2) Setup
 
 ```bash
-cd yugabyte-pulumi-cax11
+cd yugabyte-hetzner-pulumi
 pnpm install
 cp .env.example .env
 ```
