@@ -32,9 +32,11 @@ resource:
 
 storage:
   master:
+    count: 1
     storageClass: hcloud-volumes
     size: 10Gi
   tserver:
+    count: 1
     storageClass: hcloud-volumes
     size: 20Gi
 
