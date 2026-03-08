@@ -65,6 +65,8 @@ helm upgrade --install hccm hcloud/hcloud-cloud-controller-manager \
 # ── Hetzner CSI via Helm ──────────────────────────────────────────────────────
 echo ""
 echo "==> Installing Hetzner CSI driver via Helm..."
+# Delete StorageClass before CSI install to avoid reclaimPolicy field manager conflict
+kubectl delete storageclass hcloud-volumes --ignore-not-found=true
 helm upgrade --install hcloud-csi hcloud/hcloud-csi \
   --namespace kube-system \
   --wait --timeout 5m
@@ -72,7 +74,7 @@ helm upgrade --install hcloud-csi hcloud/hcloud-csi \
 # ── StorageClass ──────────────────────────────────────────────────────────────
 echo ""
 echo "==> Applying StorageClass..."
-# StorageClass reclaimPolicy is immutable; delete and recreate if it already exists.
+# Override CSI default StorageClass with our settings (Retain policy, count:1)
 kubectl delete storageclass hcloud-volumes --ignore-not-found=true
 kubectl apply -f k8s/hetzner-ccm/storageclass.yaml
 
