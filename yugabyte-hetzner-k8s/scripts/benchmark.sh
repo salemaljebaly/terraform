@@ -30,6 +30,7 @@ SCALE="${SCALE:-128}"
 CLIENTS="${CLIENTS:-128}"
 THREADS="${THREADS:-32}"
 DURATION="${DURATION:-120}"
+SKIP_INIT="${SKIP_INIT:-false}"
 MAX_TRIES="${MAX_TRIES:-10}"
 MAX_WAIT="${MAX_WAIT:-900}"
 
@@ -126,8 +127,8 @@ run_distributed_bench() {
   [[ $CLIENTS_PER_TS -lt 1 ]] && CLIENTS_PER_TS=1
   [[ $THREADS_PER_TS -lt 1 ]] && THREADS_PER_TS=1
 
-  echo "  Distributing ${CLIENTS} clients across ${TS_COUNT} tservers (${CLIENTS_PER_TS} clients each)"
-  echo ""
+  echo "  Distributing ${CLIENTS} clients across ${TS_COUNT} tservers (${CLIENTS_PER_TS} clients each)" >&2
+  echo "" >&2
 
   # Launch one pgbench job per tserver in parallel
   for i in $(seq 0 $(( TS_COUNT - 1 ))); do
@@ -181,12 +182,12 @@ spec:
               cpu: "250m"
               memory: "128Mi"
 EOF
-    echo "    Launched pgbench → yb-tserver-${i}"
+    echo "    Launched pgbench -> yb-tserver-${i}" >&2
   done
 
-  echo ""
-  echo "  All ${TS_COUNT} pgbench jobs running in parallel for ${DURATION}s..."
-  echo ""
+  echo "" >&2
+  echo "  All ${TS_COUNT} pgbench jobs running in parallel for ${DURATION}s..." >&2
+  echo "" >&2
 
   # Wait for all jobs and collect TPS
   local TOTAL_TPS=0
@@ -197,13 +198,12 @@ EOF
     local JOB_NAME="${LABEL}-ts${i}"
 
     kubectl wait --for=condition=Complete job/"$JOB_NAME" -n "$BENCH_NS" \
-      --timeout=$(( DURATION + 120 ))s 2>/dev/null || \
+      --timeout=$(( DURATION + 120 ))s >/dev/null 2>&1 || \
     kubectl wait --for=condition=Failed   job/"$JOB_NAME" -n "$BENCH_NS" \
-      --timeout=10s 2>/dev/null || true
+      --timeout=10s >/dev/null 2>&1 || true
 
     local POD
     POD=$(kubectl get pods -n "$BENCH_NS" -l "job-name=${JOB_NAME}" \
-      --field-selector=status.phase=Succeeded \
       -o jsonpath='{.items[-1:].metadata.name}' 2>/dev/null || echo "")
 
     if [[ -n "$POD" ]]; then
@@ -212,34 +212,35 @@ EOF
 
       local TPS_VAL TX_VAL RETRY_VAL
       TPS_VAL=$(echo "$LOGS"   | grep -E "^\s*tps\s*="                      | grep -oE '[0-9]+\.[0-9]+' | head -1 || echo "0")
-      TX_VAL=$(echo "$LOGS"    | grep "transactions actually processed"       | grep -oE '^[0-9]+'        | head -1 || echo "0")
-      RETRY_VAL=$(echo "$LOGS" | grep "transactions retried"                  | grep -oE '^[0-9]+'        | head -1 || echo "0")
+      TX_VAL=$(echo "$LOGS"    | grep "transactions actually processed"       | grep -oE '[0-9]+'         | tail -1 || echo "0")
+      RETRY_VAL=$(echo "$LOGS" | grep "transactions retried"                  | grep -oE '[0-9]+'         | head -1 || echo "0")
 
-      printf "    tserver-%-2d │ TPS: %8s │ tx: %6s │ retried: %s\n" \
-        "$i" "$TPS_VAL" "$TX_VAL" "$RETRY_VAL"
+      printf "    tserver-%-2d | TPS: %8s | tx: %6s | retried: %s\n" \
+        "$i" "$TPS_VAL" "$TX_VAL" "$RETRY_VAL" >&2
 
       TOTAL_TPS=$(python3 -c "print(${TOTAL_TPS} + ${TPS_VAL:-0})")
       TOTAL_TX=$(( TOTAL_TX + ${TX_VAL:-0} ))
       TOTAL_RETRIES=$(( TOTAL_RETRIES + ${RETRY_VAL:-0} ))
     else
-      printf "    tserver-%-2d │ (no result)\n" "$i"
+      printf "    tserver-%-2d | (no result)\n" "$i" >&2
     fi
   done
 
-  local TOTAL_QPS
+  local TOTAL_TPS_ROUNDED TOTAL_QPS
+  TOTAL_TPS_ROUNDED=$(python3 -c "print(round(${TOTAL_TPS}, 1))")
   TOTAL_QPS=$(python3 -c "print(round(${TOTAL_TPS} * 5))")
 
-  echo ""
-  echo "  ┌─────────────────────────────────────────┐"
-  printf "  │  Total TPS  : %-26s│\n" "$(python3 -c "print(round(${TOTAL_TPS}, 1))")"
-  printf "  │  Total QPS  : %-26s│\n" "${TOTAL_QPS}  (TPS × 5 stmts/tx)"
-  printf "  │  Total TX   : %-26s│\n" "${TOTAL_TX} in ${DURATION}s"
-  printf "  │  Retries    : %-26s│\n" "${TOTAL_RETRIES}"
-  echo "  └─────────────────────────────────────────┘"
+  echo "" >&2
+  echo "  +------------------------------------------+" >&2
+  printf "  |  Total TPS  : %-26s|\n" "${TOTAL_TPS_ROUNDED}" >&2
+  printf "  |  Total QPS  : %-26s|\n" "${TOTAL_QPS}  (TPS x 5 stmts/tx)" >&2
+  printf "  |  Total TX   : %-26s|\n" "${TOTAL_TX} in ${DURATION}s" >&2
+  printf "  |  Retries    : %-26s|\n" "${TOTAL_RETRIES}" >&2
+  echo "  +------------------------------------------+" >&2
 
   # Cleanup distributed jobs
   for i in $(seq 0 $(( TS_COUNT - 1 ))); do
-    kubectl delete job "${LABEL}-ts${i}" -n "$BENCH_NS" --ignore-not-found=true 2>/dev/null || true
+    kubectl delete job "${LABEL}-ts${i}" -n "$BENCH_NS" --ignore-not-found=true >/dev/null 2>&1 || true
   done
 
   echo "$TOTAL_TPS"
@@ -259,15 +260,27 @@ echo "  Workers: ${WORKER_COUNT_BEFORE}"
 # ── Phase 2: Init pgbench schema ──────────────────────────────────────────────
 section "Phase 2 — Init pgbench schema (scale=${SCALE} → branches=${SCALE} rows, accounts=$((SCALE * 100))k rows)"
 
-run_init_job
-echo "  Schema ready."
+if [[ "$SKIP_INIT" == "true" ]]; then
+  echo "  Skipping init (SKIP_INIT=true) — using existing data."
+else
+  run_init_job
+  echo "  Schema ready."
+  echo "  Waiting 90s for YugabyteDB to finish tablet rebalancing after init..."
+  sleep 90
+fi
 
 # ── Phase 3: Baseline TPS (3 tservers) ───────────────────────────────────────
+# Use fewer clients for baseline — 3 tservers on busy nodes can't handle 42 clients each
+BASELINE_CLIENTS=$(( CLIENTS / 4 ))
+ORIG_CLIENTS=$CLIENTS
+CLIENTS=$BASELINE_CLIENTS
+
 section "Phase 3 — Baseline TPS @ 3 tservers ($(ts))"
 echo "  total_clients=${CLIENTS}  threads=${THREADS}  duration=${DURATION}s  scale=${SCALE}"
 echo ""
 
 TPS_BASELINE=$(run_distributed_bench "bench-baseline" 3)
+CLIENTS=$ORIG_CLIENTS
 echo ""
 echo "  Baseline TPS: ${TPS_BASELINE}"
 
