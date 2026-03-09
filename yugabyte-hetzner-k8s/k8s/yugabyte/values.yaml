@@ -1,0 +1,65 @@
+# YugabyteDB Helm chart values for Hetzner K3s cluster
+# Tuned for cax11 workers (2 vCPU ARM, 4GB RAM).
+# Adjust resources when moving to larger server types.
+#
+# Install:
+#   helm repo add yugabytedb https://charts.yugabyte.com
+#   helm upgrade --install yugabyte yugabytedb/yugabyte \
+#     --namespace yugabyte --create-namespace \
+#     -f k8s/yugabyte/values.yaml
+
+replicas:
+  master: 3
+  tserver: 3
+
+# Resource requests tuned for cax11 (2 vCPU, 4GB RAM per node).
+# 3 masters + 3 tservers = 6 pods across 3 workers = 2 pods per node.
+resource:
+  master:
+    requests:
+      cpu: "0.5"
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  tserver:
+    requests:
+      cpu: "0.5"
+      memory: 1Gi
+    limits:
+      cpu: "1.5"
+      memory: 2.5Gi
+
+storage:
+  master:
+    count: 1
+    storageClass: hcloud-volumes
+    size: 10Gi
+  tserver:
+    count: 1
+    storageClass: hcloud-volumes
+    size: 20Gi
+
+# Place all masters and tservers in the correct cloud/region
+gflags:
+  master:
+    placement_cloud: hetzner
+    placement_region: nbg1
+    replication_factor: "3"
+  tserver:
+    placement_cloud: hetzner
+    placement_region: nbg1
+
+# Expose YSQL port via NodePort for external access
+# Change to LoadBalancer if Hetzner CCM is installed
+service:
+  master:
+    type: ClusterIP
+  tserver:
+    type: NodePort
+    ports:
+      ysqlPort: 5433
+      ycqlPort: 9042
+
+# Pod anti-affinity ensures one master per node and one tserver per node
+enableLoadBalancer: false

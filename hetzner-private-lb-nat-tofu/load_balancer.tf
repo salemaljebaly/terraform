@@ -37,7 +37,7 @@ resource "hcloud_load_balancer_service" "http" {
     retries  = 3
 
     http {
-      path         = "/"
+      path         = "/health"
       status_codes = ["200"]
     }
   }

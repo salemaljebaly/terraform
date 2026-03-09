@@ -1,0 +1,62 @@
+#!/bin/bash
+set -euo pipefail
+
+echo "==> [master] Starting K3s master init..."
+
+export DEBIAN_FRONTEND=noninteractive
+
+# Retry apt-get to handle transient failures on first boot
+for i in $(seq 1 10); do
+  apt-get -o Acquire::ForceIPv4=true update -q && break
+  echo "apt-get update failed (attempt $i), retrying in 5s..."
+  sleep 5
+done
+apt-get -o Acquire::ForceIPv4=true install -y -q curl
+
+# Registry mirror for registry.k8s.io
+# Hetzner node IPs are sometimes blocked by the CDN — mirror via master.
+mkdir -p /etc/rancher/k3s
+cat >/etc/rancher/k3s/registries.yaml <<EOF
+mirrors:
+  "registry.k8s.io":
+    endpoint:
+      - "http://__MASTER_IP__:5000"
+      - "https://registry.k8s.io"
+EOF
+
+# Detect private network interface and IPs
+# Works on both x86 (enp7s0) and ARM (CAX) Hetzner servers.
+PRIVATE_IP=$(ip -4 addr | awk '/inet 10\.0\./{print $2}' | cut -d/ -f1 | head -1)
+# Find the interface that carries 10.0.x.x traffic.
+# Hetzner routes look like: "10.0.0.0/16 via 10.0.0.1 dev enp7s0 ..."
+# We look for the word AFTER "dev", not field $3 (which is the gateway).
+PRIVATE_IFACE=$(ip -4 route | awk '/10\.0\./{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}')
+PUBLIC_IP=$(ip -4 addr show eth0 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 || \
+            ip -4 addr | awk '!/10\./ && !/127\./ && /inet /{print $2}' | cut -d/ -f1 | head -1)
+
+echo "==> Private IP: $PRIVATE_IP | Interface: $PRIVATE_IFACE | Public IP: $PUBLIC_IP"
+
+# Install K3s server
+# - traefik/servicelb disabled — using Hetzner CCM + CSI instead
+# - cloud-controller disabled — Hetzner CCM manages this externally
+# - Master tainted so YugabyteDB pods never schedule here
+curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="__K3S_VERSION__" sh -s - server \
+  --disable traefik \
+  --disable servicelb \
+  --disable-cloud-controller \
+  --write-kubeconfig-mode 644 \
+  --kubelet-arg="cloud-provider=external" \
+  --token="__K3S_TOKEN__" \
+  --cluster-init \
+  --node-ip="$PRIVATE_IP" \
+  --flannel-iface="$PRIVATE_IFACE" \
+  --tls-san="$PUBLIC_IP" \
+  --tls-san="__MASTER_IP__" \
+  --cluster-cidr="10.42.0.0/16" \
+  --service-cidr="10.43.0.0/16" \
+  --node-taint CriticalAddonsOnly=true:NoSchedule
+
+echo "==> Waiting for K3s to be ready..."
+timeout 120 bash -c 'until kubectl get nodes 2>/dev/null | grep -q Ready; do sleep 5; done'
+
+echo "==> K3s master init complete. Cluster: __CLUSTER_NAME__"

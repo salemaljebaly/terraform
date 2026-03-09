@@ -37,6 +37,6 @@ write_files:
       WantedBy=multi-user.target
 
 runcmd:
-  - ip route replace default via ${network_gateway_ip} dev enp7s0 || true
+  - IFACE=$(ip route | awk '/^default/{print $5; exit}') && ip route replace default via ${network_gateway_ip} dev "$IFACE" || true
   - systemctl enable simple-web.service
   - systemctl restart simple-web.service

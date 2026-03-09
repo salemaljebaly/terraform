@@ -1,0 +1,25 @@
+name: yugabyte-hetzner-k8s
+runtime:
+  name: nodejs
+  options:
+    typescript: true
+description: YugabyteDB on K3s + Hetzner Cloud with Pulumi TypeScript
+backend:
+  url: file://~
+config:
+  yugabyte-hetzner-k8s:location:
+    default: nbg1
+  yugabyte-hetzner-k8s:networkZone:
+    default: eu-central
+  yugabyte-hetzner-k8s:masterServerType:
+    default: cax21
+  yugabyte-hetzner-k8s:workerServerType:
+    default: cax11
+  yugabyte-hetzner-k8s:workerCount:
+    default: 3
+  yugabyte-hetzner-k8s:workerMinCount:
+    default: 3
+  yugabyte-hetzner-k8s:workerMaxCount:
+    default: 10
+  yugabyte-hetzner-k8s:k3sVersion:
+    default: v1.34.1+k3s1

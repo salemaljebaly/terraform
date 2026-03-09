@@ -1,0 +1,8 @@
+node_modules/
+bin/
+.env
+Pulumi.*.yaml
+!Pulumi.yaml
+!Pulumi.example.yaml
+kubeconfig.yaml
+*.tfstate
