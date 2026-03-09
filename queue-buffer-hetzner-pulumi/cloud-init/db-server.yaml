@@ -1,0 +1,61 @@
+#cloud-config
+
+write_files:
+  - path: /opt/db/docker-compose.yml
+    permissions: "0644"
+    owner: root:root
+    content: |
+      services:
+        postgres:
+          image: postgres:17
+          container_name: postgres
+          restart: unless-stopped
+          environment:
+            POSTGRES_DB: ${POSTGRES_DB}
+            POSTGRES_USER: ${POSTGRES_USER}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+          ports:
+            - "5432:5432"
+          volumes:
+            - pg_data:/var/lib/postgresql/data
+            - /opt/db/init:/docker-entrypoint-initdb.d
+          healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+
+      volumes:
+        pg_data:
+          driver: local
+
+  # ── Migrations ────────────────────────────────────────────────────────────────
+  # Add your migration SQL files here.
+  # Files in /opt/db/init/ run automatically on first start (alphabetical order).
+  # Example: 001_create_tables.sql, 002_add_indexes.sql, etc.
+  - path: /opt/db/init/001_create_events.sql
+    permissions: "0644"
+    owner: root:root
+    content: |
+      -- Queue buffer template: events table
+      -- Replace or extend this schema for your application.
+      CREATE TABLE IF NOT EXISTS events (
+          id          BIGSERIAL PRIMARY KEY,
+          event_type  TEXT        NOT NULL,
+          payload     JSONB       NOT NULL DEFAULT '{}',
+          status      TEXT        NOT NULL DEFAULT 'pending',
+          created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          processed_at TIMESTAMPTZ
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_events_status     ON events(status);
+      CREATE INDEX IF NOT EXISTS idx_events_event_type ON events(event_type);
+      CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC);
+
+runcmd:
+  - apt-get update -q
+  - apt-get install -y -q docker.io docker-compose-v2
+  - systemctl enable docker
+  - systemctl start docker
+  - cd /opt/db && docker compose up -d
+  - echo "DB server ready"

@@ -1,0 +1,13 @@
+config:
+  queue-buffer-hetzner-pulumi:location: nbg1
+  queue-buffer-hetzner-pulumi:dbServerType: cx22
+  queue-buffer-hetzner-pulumi:queueServerType: cx22
+  queue-buffer-hetzner-pulumi:serverImage: ubuntu-24.04
+  queue-buffer-hetzner-pulumi:workerConcurrency: "10"
+  queue-buffer-hetzner-pulumi:postgresDb: appdb
+  queue-buffer-hetzner-pulumi:postgresUser: appuser
+  queue-buffer-hetzner-pulumi:sshKeyName: your-ssh-key-name
+  queue-buffer-hetzner-pulumi:sshAllowedCidrs:
+    - 203.0.113.10/32
+  hcloudToken:
+    secure: REPLACE_WITH_PULUMI_SECRET

@@ -1,0 +1,157 @@
+#cloud-config
+
+write_files:
+  - path: /opt/queue/docker-compose.yml
+    permissions: "0644"
+    owner: root:root
+    content: |
+      services:
+
+        # ── RabbitMQ ─────────────────────────────────────────────────────────────
+        rabbitmq:
+          image: rabbitmq:4-management
+          container_name: rabbitmq
+          restart: unless-stopped
+          environment:
+            RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+            RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+          ports:
+            - "5672:5672"    # AMQP — your app connects here
+            - "15672:15672"  # Management UI — http://<server-ip>:15672
+          volumes:
+            - rabbitmq_data:/var/lib/rabbitmq
+          healthcheck:
+            test: ["CMD", "rabbitmq-diagnostics", "ping"]
+            interval: 15s
+            timeout: 10s
+            retries: 5
+
+        # ── Worker ────────────────────────────────────────────────────────────────
+        # Reads from RabbitMQ queue, writes to PostgreSQL at a controlled rate.
+        # WORKER_CONCURRENCY = max parallel DB writes per second.
+        worker:
+          image: node:22-alpine
+          container_name: worker
+          restart: unless-stopped
+          depends_on:
+            rabbitmq:
+              condition: service_healthy
+          environment:
+            RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+            POSTGRES_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}
+            QUEUE_NAME: events
+            WORKER_CONCURRENCY: "${WORKER_CONCURRENCY}"
+          volumes:
+            - /opt/queue/worker:/app
+          working_dir: /app
+          command: sh -c "npm install --silent && node worker.js"
+
+      volumes:
+        rabbitmq_data:
+          driver: local
+
+  # ── Worker source ──────────────────────────────────────────────────────────────
+  # This worker reads messages from RabbitMQ and writes to PostgreSQL.
+  # Customize the processMessage() function for your application logic.
+  - path: /opt/queue/worker/package.json
+    permissions: "0644"
+    owner: root:root
+    content: |
+      {
+        "name": "queue-worker",
+        "version": "1.0.0",
+        "dependencies": {
+          "amqplib": "^0.10.4",
+          "pg": "^8.13.3"
+        }
+      }
+
+  - path: /opt/queue/worker/worker.js
+    permissions: "0644"
+    owner: root:root
+    content: |
+      'use strict';
+      const amqp = require('amqplib');
+      const { Pool } = require('pg');
+
+      const RABBITMQ_URL     = process.env.RABBITMQ_URL;
+      const POSTGRES_URL     = process.env.POSTGRES_URL;
+      const QUEUE_NAME       = process.env.QUEUE_NAME || 'events';
+      const CONCURRENCY      = parseInt(process.env.WORKER_CONCURRENCY || '10', 10);
+
+      const db = new Pool({ connectionString: POSTGRES_URL });
+
+      // ── processMessage ─────────────────────────────────────────────────────────
+      // This is the only function you need to change for your application.
+      // msg.content is the raw Buffer from RabbitMQ.
+      // Return true to acknowledge (delete from queue), false to requeue.
+      async function processMessage(msg) {
+        const data = JSON.parse(msg.content.toString());
+
+        // Example: write an event record to PostgreSQL
+        // Replace this with your own logic (create order, send SMS, etc.)
+        await db.query(
+          `INSERT INTO events (event_type, payload, status, processed_at)
+           VALUES ($1, $2, 'processed', NOW())`,
+          [data.event_type || 'unknown', JSON.stringify(data)]
+        );
+
+        return true; // acknowledge message
+      }
+      // ──────────────────────────────────────────────────────────────────────────
+
+      async function start() {
+        console.log(`Worker starting | queue=${QUEUE_NAME} | concurrency=${CONCURRENCY}`);
+
+        let conn, channel;
+        // Retry connection loop — RabbitMQ may not be ready immediately
+        while (true) {
+          try {
+            conn    = await amqp.connect(RABBITMQ_URL);
+            channel = await conn.createChannel();
+            break;
+          } catch (e) {
+            console.log('Waiting for RabbitMQ...', e.message);
+            await new Promise(r => setTimeout(r, 3000));
+          }
+        }
+
+        await channel.assertQueue(QUEUE_NAME, { durable: true });
+        channel.prefetch(CONCURRENCY); // controls DB write rate
+
+        console.log(`Listening on queue "${QUEUE_NAME}"...`);
+
+        channel.consume(QUEUE_NAME, async (msg) => {
+          if (!msg) return;
+          try {
+            const ok = await processMessage(msg);
+            if (ok) {
+              channel.ack(msg);
+            } else {
+              channel.nack(msg, false, true); // requeue
+            }
+          } catch (err) {
+            console.error('Error processing message:', err.message);
+            channel.nack(msg, false, true); // requeue on error
+          }
+        });
+
+        conn.on('error', (err) => {
+          console.error('RabbitMQ connection error:', err.message);
+          process.exit(1); // Docker will restart
+        });
+      }
+
+      start().catch(err => {
+        console.error('Fatal:', err);
+        process.exit(1);
+      });
+
+runcmd:
+  - apt-get update -q
+  - apt-get install -y -q docker.io docker-compose-v2
+  - systemctl enable docker
+  - systemctl start docker
+  - mkdir -p /opt/queue/worker
+  - cd /opt/queue && docker compose up -d
+  - echo "Queue + Worker server ready"
