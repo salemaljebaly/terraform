@@ -4,9 +4,6 @@ runtime:
   name: nodejs
   options:
     packagemanager: npm
-    typescript: true
-backend:
-  url: file://~
 config:
   pulumi:tags:
     value:
