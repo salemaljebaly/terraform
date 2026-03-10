@@ -4,7 +4,7 @@ A production-ready template for absorbing traffic spikes before they hit your da
 
 Provisions two servers on Hetzner Cloud:
 - **Queue server** — RabbitMQ + Worker (Node.js), public IP
-- **DB server** — PostgreSQL 17, private network only
+- **DB server** — PostgreSQL 18, private network only
 
 ## The Problem This Solves
 
@@ -42,14 +42,20 @@ DB Server (no public IP)
 
 ```bash
 cd queue-buffer-hetzner-pulumi
-npm install
+pnpm install
 cp .env.example .env
 # Edit .env — set HCLOUD_TOKEN
 set -a && source .env && set +a
 
 pulumi stack init dev
-pulumi config set sshKeyName your-ssh-key-name
-pulumi config set sshAllowedCidrs '["YOUR_IP/32"]'
+
+# Option A — upload your local SSH key automatically (recommended)
+pulumi config set sshPublicKeyPath ~/.ssh/id_rsa.pub
+
+# Option B — use an existing key already in Hetzner
+# pulumi config set sshKeyName your-existing-key-name
+
+pulumi config set sshAllowedCidrs "[\"$(curl -s ifconfig.me)/32\"]" 
 pulumi config set --secret hcloudToken $HCLOUD_TOKEN
 
 pulumi up
@@ -70,7 +76,7 @@ pulumi stack output sshToDb             # SSH to DB via jump host
 
 ```bash
 export QUEUE_IP=$(pulumi stack output queuePublicIp)
-export RABBIT_PASS=$(pulumi stack output --show-secrets rabbitmqAmqpUrl | grep -oP '(?<=admin:)[^@]+')
+export RABBIT_PASS=$(pulumi stack output --show-secrets rabbitmqAmqpUrl | sed 's/amqp:\/\/admin://;s/@.*//')
 
 RATE=1000 DURATION=30 ./scripts/benchmark.sh
 ```
