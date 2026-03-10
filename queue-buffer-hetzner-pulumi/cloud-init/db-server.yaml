@@ -1,4 +1,5 @@
 #cloud-config
+# Hetzner Docker CE app image — Docker already installed, just run compose.
 
 write_files:
   - path: /opt/db/docker-compose.yml
@@ -7,7 +8,7 @@ write_files:
     content: |
       services:
         postgres:
-          image: postgres:17
+          image: postgres:18.3-alpine3.23
           container_name: postgres
           restart: unless-stopped
           environment:
@@ -30,9 +31,8 @@ write_files:
           driver: local
 
   # ── Migrations ────────────────────────────────────────────────────────────────
-  # Add your migration SQL files here.
   # Files in /opt/db/init/ run automatically on first start (alphabetical order).
-  # Example: 001_create_tables.sql, 002_add_indexes.sql, etc.
+  # Add your own migration SQL files here.
   - path: /opt/db/init/001_create_events.sql
     permissions: "0644"
     owner: root:root
@@ -40,11 +40,11 @@ write_files:
       -- Queue buffer template: events table
       -- Replace or extend this schema for your application.
       CREATE TABLE IF NOT EXISTS events (
-          id          BIGSERIAL PRIMARY KEY,
-          event_type  TEXT        NOT NULL,
-          payload     JSONB       NOT NULL DEFAULT '{}',
-          status      TEXT        NOT NULL DEFAULT 'pending',
-          created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          id           BIGSERIAL    PRIMARY KEY,
+          event_type   TEXT         NOT NULL,
+          payload      JSONB        NOT NULL DEFAULT '{}',
+          status       TEXT         NOT NULL DEFAULT 'pending',
+          created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
           processed_at TIMESTAMPTZ
       );
 
@@ -53,9 +53,5 @@ write_files:
       CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC);
 
 runcmd:
-  - apt-get update -q
-  - apt-get install -y -q docker.io docker-compose-v2
-  - systemctl enable docker
-  - systemctl start docker
   - cd /opt/db && docker compose up -d
   - echo "DB server ready"
