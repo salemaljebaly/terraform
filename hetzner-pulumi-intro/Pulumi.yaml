@@ -1,0 +1,13 @@
+name: hetzner-pulumi-intro
+description: Getting started with Pulumi and TypeScript on Hetzner Cloud
+runtime:
+  name: nodejs
+  options:
+    packagemanager: npm
+    typescript: true
+backend:
+  url: file://~
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: typescript
