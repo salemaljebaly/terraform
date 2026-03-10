@@ -19,9 +19,9 @@ config:
   queue-buffer-hetzner-pulumi:networkZone:
     default: eu-central
   queue-buffer-hetzner-pulumi:dbServerType:
-    default: cx22
+    default: cx23
   queue-buffer-hetzner-pulumi:queueServerType:
-    default: cx22
+    default: cx23
   queue-buffer-hetzner-pulumi:serverImage:
     default: ubuntu-24.04
   queue-buffer-hetzner-pulumi:networkCidr:
