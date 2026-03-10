@@ -2,21 +2,21 @@
 
 A production-ready template for absorbing traffic spikes before they hit your database.
 
-Provisions two servers on Hetzner Cloud:
-- **Queue server** — RabbitMQ + Worker (Node.js), public IP
-- **DB server** — PostgreSQL 18, private network only
+Provisions two servers on Hetzner Cloud using Pulumi — **from zero to ready in ~30 seconds** (Hetzner Docker CE app image):
+- **Queue server** — RabbitMQ 4.2.4 + Worker (Node.js), public IP
+- **DB server** — PostgreSQL 18.3 Alpine, public IP (firewall-restricted)
 
 ## The Problem This Solves
 
 ```
 Without queue:
-  App → 1,000 requests/sec → DB can handle 100/sec → DB crashes
+  App → 10,000 req/sec → DB handles ~800/sec → DB crashes
 
 With queue buffer:
-  App → 1,000 requests/sec → RabbitMQ (absorbs instantly)
-                                   │ worker drains at 100/sec
-                                   ▼
-                              PostgreSQL (never overwhelmed)
+  App → 10,000 req/sec → RabbitMQ (absorbs all instantly)
+                               │ worker drains at controlled rate
+                               ▼
+                          PostgreSQL (never overwhelmed)
   App response: "Request received" — returned immediately
 ```
 
@@ -25,18 +25,40 @@ With queue buffer:
 ```
 Internet
     │
-    ▼
-Queue Server (public IP)
-  ├── RabbitMQ :5672   ← your app publishes here
-  ├── RabbitMQ UI :15672
-  └── Worker (Node.js) ← reads queue, writes to DB
-
-Private Network (10.10.1.0/24)
+    ├── App publishes → Queue Server (public IP)
+    │                     ├── RabbitMQ :5672    ← app connects here
+    │                     ├── RabbitMQ UI :15672
+    │                     └── Worker (Node.js)  ← drains queue to DB
     │
-    ▼
-DB Server (no public IP)
-  └── PostgreSQL :5432
+    └── SSH/admin    → DB Server (public IP, firewall-restricted)
+                          └── PostgreSQL :5432  ← only queue server can write
 ```
+
+## Benchmark Results
+
+Tested on **cx23 (2 vCPU / 4GB RAM)** — both tests over internet for fair comparison:
+
+| Metric | Result |
+|--------|--------|
+| PostgreSQL direct inserts (internet) | **~786 inserts/sec** |
+| RabbitMQ publish rate (internet) | **~9,800 msg/sec** |
+| Worker drain rate (private network) | **~3,000 msg/sec** |
+| Queue advantage | **12.5× faster than direct DB** |
+
+```
+User sends 10,000 req/sec
+        │
+        ▼
+RabbitMQ accepts all instantly   (~9,800/sec ceiling from internet)
+        │
+        ▼
+Worker drains to DB              (~3,000/sec — improvable via workerConcurrency)
+        │
+        ▼
+PostgreSQL writes safely         (~8,000/sec on private network)
+```
+
+**The queue absorbs 12.5× more traffic than PostgreSQL can handle directly from the internet.**
 
 ## Quick Start
 
@@ -55,7 +77,7 @@ pulumi config set sshPublicKeyPath ~/.ssh/id_rsa.pub
 # Option B — use an existing key already in Hetzner
 # pulumi config set sshKeyName your-existing-key-name
 
-pulumi config set sshAllowedCidrs "[\"$(curl -s ifconfig.me)/32\"]" 
+pulumi config set sshAllowedCidrs "[\"$(curl -s ifconfig.me)/32\"]"
 pulumi config set --secret hcloudToken $HCLOUD_TOKEN
 
 pulumi up
@@ -65,11 +87,12 @@ pulumi up
 
 ```bash
 pulumi stack output queuePublicIp       # Queue server IP
-pulumi stack output rabbitmqManagement  # RabbitMQ UI URL
-pulumi stack output rabbitmqAmqpUrl     # AMQP connection URL
-pulumi stack output postgresPrivateUrl  # PostgreSQL URL (private)
+pulumi stack output dbPublicIp          # DB server IP
+pulumi stack output rabbitmqManagement  # RabbitMQ UI — http://<ip>:15672
+pulumi stack output rabbitmqAmqpUrl     # AMQP connection URL (secret)
+pulumi stack output postgresUrl         # PostgreSQL URL (secret)
 pulumi stack output sshToQueue          # SSH to queue server
-pulumi stack output sshToDb             # SSH to DB via jump host
+pulumi stack output sshToDb             # SSH to DB server
 ```
 
 ## Benchmark
@@ -77,52 +100,53 @@ pulumi stack output sshToDb             # SSH to DB via jump host
 ```bash
 export QUEUE_IP=$(pulumi stack output queuePublicIp)
 export RABBIT_PASS=$(pulumi stack output --show-secrets rabbitmqAmqpUrl | sed 's/amqp:\/\/admin://;s/@.*//')
+export DB_IP=$(pulumi stack output dbPublicIp)
+export DB_PASS=$(pulumi stack output --show-secrets postgresUrl | sed 's|postgresql://appuser:||;s|@.*||')
 
-RATE=1000 DURATION=30 ./scripts/benchmark.sh
+./scripts/benchmark.sh
 ```
 
-Shows: direct DB limit vs queue absorbing 1,000 msg/sec while DB receives at controlled rate.
+Runs three phases:
+1. **DB ceiling** — direct inserts over internet via SSH tunnel
+2. **RabbitMQ ceiling** — publish rate from internet
+3. **Worker drain** — how fast queue empties to DB
 
 ## Use Your Own Application
 
 **Only two things to change:**
 
-1. Edit `cloud-init/db-server.yaml` — add your migration SQL in `/opt/db/init/`
-2. Edit `cloud-init/queue-server.yaml` — replace the `processMessage()` function in `worker.js`
+**1.** Add your migration SQL in `cloud-init/db-server.yaml` under `/opt/db/init/`
 
-The `processMessage()` function receives each message and writes to the DB. Example for an order system:
+**2.** Replace `processMessage()` in `cloud-init/queue-server.yaml`:
 
 ```javascript
 async function processMessage(msg) {
-  const order = JSON.parse(msg.content.toString());
-  await db.query(
-    `INSERT INTO orders (customer_id, total, items) VALUES ($1, $2, $3)`,
-    [order.customerId, order.total, JSON.stringify(order.items)]
-  );
-  return true;
+  const data = JSON.parse(msg.content.toString());
+  // your logic here — insert order, send notification, process event, etc.
+  await db.query('INSERT INTO your_table ...', [...]);
+  return true; // acknowledge message
 }
 ```
 
 Your app publishes to RabbitMQ:
 
 ```javascript
-// Node.js example
 channel.sendToQueue('events',
-  Buffer.from(JSON.stringify({ customerId: 123, total: 99.99, items: [...] })),
+  Buffer.from(JSON.stringify({ your: 'data' })),
   { persistent: true }
 );
-// Returns instantly — customer sees "Order received"
+// Returns instantly — no waiting for DB
 ```
 
 ## Tuning
 
 | Config | Default | Description |
 |--------|---------|-------------|
-| `workerConcurrency` | 10 | Max parallel DB writes (controls drain rate) |
-| `dbServerType` | cx22 | DB server spec |
-| `queueServerType` | cx22 | Queue server spec |
+| `workerConcurrency` | 10 | Parallel DB writes — increase to push more toward DB ceiling |
+| `dbServerType` | cx23 | DB server spec |
+| `queueServerType` | cx23 | Queue server spec |
 
-Higher `workerConcurrency` = faster drain but more DB load. Set it to your DB's comfortable write rate.
+Higher `workerConcurrency` → faster drain → more DB load. Start at 10, increase until DB CPU hits ~70%.
 
 ## Destroy
 
@@ -132,4 +156,4 @@ pulumi destroy
 
 ## Cost
 
-~€8/month (2× cx22 servers on Hetzner).
+~€8/month (2× cx23 on Hetzner).
