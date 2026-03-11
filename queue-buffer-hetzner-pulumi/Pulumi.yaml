@@ -1,0 +1,40 @@
+name: queue-buffer-hetzner-pulumi
+description: >
+  Queue buffer pattern on Hetzner Cloud — RabbitMQ + PostgreSQL + Worker.
+  A general-purpose template for absorbing traffic spikes before they hit the database.
+  Works for any system: SMS gateway, e-commerce orders, IoT events, notifications.
+runtime:
+  name: nodejs
+  options:
+    packagemanager: npm
+    typescript: true
+backend:
+  url: file://~
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: typescript
+  queue-buffer-hetzner-pulumi:location:
+    default: nbg1
+  queue-buffer-hetzner-pulumi:networkZone:
+    default: eu-central
+  queue-buffer-hetzner-pulumi:dbServerType:
+    default: cx23
+  queue-buffer-hetzner-pulumi:queueServerType:
+    default: cx23
+  queue-buffer-hetzner-pulumi:serverImage:
+    default: ubuntu-24.04
+  queue-buffer-hetzner-pulumi:networkCidr:
+    default: 10.10.0.0/16
+  queue-buffer-hetzner-pulumi:subnetCidr:
+    default: 10.10.1.0/24
+  queue-buffer-hetzner-pulumi:dbPrivateIp:
+    default: 10.10.1.10
+  queue-buffer-hetzner-pulumi:queuePrivateIp:
+    default: 10.10.1.20
+  queue-buffer-hetzner-pulumi:workerConcurrency:
+    default: "10"
+  queue-buffer-hetzner-pulumi:postgresDb:
+    default: appdb
+  queue-buffer-hetzner-pulumi:postgresUser:
+    default: appuser

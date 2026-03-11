@@ -1,0 +1,168 @@
+#cloud-config
+# Hetzner Docker CE app image — Docker already installed, just run compose.
+
+write_files:
+  - path: /opt/queue/docker-compose.yml
+    permissions: "0644"
+    owner: root:root
+    content: |
+      services:
+
+        # ── RabbitMQ ─────────────────────────────────────────────────────────────
+        rabbitmq:
+          image: rabbitmq:4.2.4-management
+          container_name: rabbitmq
+          restart: unless-stopped
+          environment:
+            RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+            RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+          ports:
+            - "5672:5672"    # AMQP — your app connects here
+            - "15672:15672"  # Management UI — http://<server-ip>:15672
+          volumes:
+            - rabbitmq_data:/var/lib/rabbitmq
+          healthcheck:
+            test: ["CMD", "rabbitmq-diagnostics", "ping"]
+            interval: 15s
+            timeout: 10s
+            retries: 5
+
+        # ── Worker ────────────────────────────────────────────────────────────────
+        # Reads from RabbitMQ, writes to PostgreSQL using batch inserts.
+        # 2 replicas → uses both CPU cores (Node.js is single-threaded).
+        # BATCH_SIZE = messages per INSERT (default 50) — higher = faster throughput.
+        # WORKER_CONCURRENCY = prefetch per worker instance.
+        worker:
+          image: node:22-alpine
+          restart: unless-stopped
+          depends_on:
+            rabbitmq:
+              condition: service_healthy
+          environment:
+            RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+            POSTGRES_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}
+            QUEUE_NAME: events
+            WORKER_CONCURRENCY: "200"
+            BATCH_SIZE: "50"
+            BATCH_FLUSH_MS: "50"
+          volumes:
+            - /opt/queue/worker:/app
+          working_dir: /app
+          command: sh -c "npm install --silent && node worker.js"
+
+      volumes:
+        rabbitmq_data:
+          driver: local
+
+  - path: /opt/queue/worker/package.json
+    permissions: "0644"
+    owner: root:root
+    content: |
+      {
+        "name": "queue-worker",
+        "version": "1.0.0",
+        "dependencies": {
+          "amqplib": "^0.10.4",
+          "pg": "^8.13.3"
+        }
+      }
+
+  - path: /opt/queue/worker/worker.js
+    permissions: "0644"
+    owner: root:root
+    content: |
+      'use strict';
+      const amqp = require('amqplib');
+      const { Pool } = require('pg');
+
+      const RABBITMQ_URL = process.env.RABBITMQ_URL;
+      const POSTGRES_URL = process.env.POSTGRES_URL;
+      const QUEUE_NAME   = process.env.QUEUE_NAME   || 'events';
+      const CONCURRENCY  = parseInt(process.env.WORKER_CONCURRENCY || '10', 10);
+      const BATCH_SIZE   = parseInt(process.env.BATCH_SIZE         || '50', 10);
+      const BATCH_FLUSH_MS = parseInt(process.env.BATCH_FLUSH_MS   || '100', 10);
+
+      const db = new Pool({ connectionString: POSTGRES_URL, max: 20 });
+
+      // ── processBatch ───────────────────────────────────────────────────────────
+      // Receives an array of messages and writes them in a single INSERT.
+      // Replace this with your own logic for batch processing.
+      async function processBatch(messages) {
+        const rows = messages.map(msg => JSON.parse(msg.content.toString()));
+        const placeholders = rows.map((_, i) =>
+          `($${i * 2 + 1}, $${i * 2 + 2}, 'processed', NOW())`
+        ).join(', ');
+        const values = rows.flatMap(d => [
+          d.event_type || 'unknown',
+          JSON.stringify(d)
+        ]);
+        await db.query(
+          `INSERT INTO events (event_type, payload, status, processed_at) VALUES ${placeholders}`,
+          values
+        );
+      }
+      // ──────────────────────────────────────────────────────────────────────────
+
+      async function start() {
+        console.log(`Worker starting | queue=${QUEUE_NAME} | concurrency=${CONCURRENCY} | batch=${BATCH_SIZE}`);
+        let conn, channel;
+        while (true) {
+          try {
+            conn    = await amqp.connect(RABBITMQ_URL);
+            channel = await conn.createChannel();
+            break;
+          } catch (e) {
+            console.log('Waiting for RabbitMQ...', e.message);
+            await new Promise(r => setTimeout(r, 3000));
+          }
+        }
+
+        await channel.assertQueue(QUEUE_NAME, { durable: true });
+        channel.prefetch(CONCURRENCY);
+        console.log(`Listening on queue "${QUEUE_NAME}"...`);
+
+        let batch   = [];
+        let pending = [];
+        let timer   = null;
+
+        const flushBatch = async () => {
+          if (batch.length === 0) return;
+          const current = batch;
+          const acks    = pending;
+          batch   = [];
+          pending = [];
+          timer   = null;
+          try {
+            await processBatch(current);
+            acks.forEach(msg => channel.ack(msg));
+          } catch (err) {
+            console.error('Batch error:', err.message);
+            acks.forEach(msg => channel.nack(msg, false, true));
+          }
+        };
+
+        channel.consume(QUEUE_NAME, async (msg) => {
+          if (!msg) return;
+          batch.push(msg);
+          pending.push(msg);
+
+          // Flush when batch is full
+          if (batch.length >= BATCH_SIZE) {
+            if (timer) { clearTimeout(timer); timer = null; }
+            await flushBatch();
+          } else if (!timer) {
+            // Or flush after BATCH_FLUSH_MS even if batch not full
+            timer = setTimeout(flushBatch, BATCH_FLUSH_MS);
+          }
+        });
+
+        conn.on('error', () => process.exit(1));
+      }
+
+      start().catch(err => { console.error('Fatal:', err); process.exit(1); });
+
+runcmd:
+  - mkdir -p /opt/queue/worker
+  # Scale worker to 2 instances — uses both CPU cores (Node.js is single-threaded)
+  - cd /opt/queue && docker compose up -d --scale worker=2
+  - echo "Queue + Worker server ready"
