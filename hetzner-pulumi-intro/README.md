@@ -1,7 +1,5 @@
 # Getting Started with Pulumi and TypeScript on Hetzner Cloud
 
-Companion code for the [Hetzner Community Tutorial](https://community.hetzner.com/tutorials/getting-started-pulumi-hetzner-typescript).
-
 ## Quick Start
 
 ```bash

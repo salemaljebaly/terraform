@@ -13,7 +13,7 @@ const provider = new hcloud.Provider("hcloud", {
 // Provision a server
 const server = new hcloud.Server("my-first-server", {
   name:       "my-first-server",
-  serverType: "cx22",
+  serverType: "cx23",
   image:      "ubuntu-24.04",
   location:   "nbg1",
   labels: {
