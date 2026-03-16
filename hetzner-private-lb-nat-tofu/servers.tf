@@ -25,9 +25,8 @@ resource "hcloud_server" "app" {
   }
 
   user_data = templatefile("${path.module}/script/cloud-init.yaml.tpl", {
-    server_name            = each.key
-    nat_gateway_private_ip = var.nat_gateway_private_ip
-    network_gateway_ip     = var.network_gateway_ip
+    server_name        = each.key
+    network_gateway_ip = var.network_gateway_ip
   })
 
   labels = merge(local.common_labels, {
