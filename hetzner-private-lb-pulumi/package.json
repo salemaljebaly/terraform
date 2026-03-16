@@ -1,0 +1,23 @@
+{
+  "name": "hetzner-private-lb-pulumi",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Private app server behind a public Hetzner Load Balancer using Pulumi TypeScript",
+  "main": "index.ts",
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "preview": "pulumi preview",
+    "up": "pulumi up",
+    "destroy": "pulumi destroy",
+    "outputs": "pulumi stack output"
+  },
+  "dependencies": {
+    "@pulumi/hcloud": "^1.32.1",
+    "@pulumi/pulumi": "^3.225.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.5",
+    "typescript": "^5.9.3"
+  }
+}

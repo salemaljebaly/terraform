@@ -1,0 +1,15 @@
+config:
+  hetzner-private-lb-pulumi:location: nbg1
+  hetzner-private-lb-pulumi:networkZone: eu-central
+  hetzner-private-lb-pulumi:loadBalancerType: lb11
+  hetzner-private-lb-pulumi:serverType: cx23
+  hetzner-private-lb-pulumi:image: ubuntu-24.04
+  hetzner-private-lb-pulumi:networkCidr: 10.44.0.0/16
+  hetzner-private-lb-pulumi:privateSubnetCidr: 10.44.10.0/24
+  hetzner-private-lb-pulumi:loadBalancerPrivateIp: 10.44.10.10
+  hetzner-private-lb-pulumi:appPrivateIp: 10.44.10.11
+  hetzner-private-lb-pulumi:sshKeyName: your-existing-hcloud-ssh-key
+  hetzner-private-lb-pulumi:sshAllowedCidrs:
+    - 203.0.113.10/32
+  hcloudToken:
+    secure: REPLACE_WITH_PULUMI_SECRET
