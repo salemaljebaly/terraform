@@ -14,10 +14,44 @@ Internet → HTTPS (443) → Load Balancer (TLS terminated) → HTTP (80) → ap
 
 ## Prerequisites
 
-- Domain with DNS managed by Hetzner DNS
+- A domain with DNS managed by Hetzner DNS (see DNS setup below)
 - Hetzner Cloud API token (Project → Security → API Tokens → Generate)
 - [Node.js](https://nodejs.org/) 18+
 - [Pulumi CLI](https://www.pulumi.com/docs/install/) installed
+
+## DNS Setup
+
+Hetzner managed certificates require Hetzner DNS to be authoritative for your domain.
+
+**1. Create a zone in Hetzner DNS**
+
+Go to [dns.hetzner.com](https://dns.hetzner.com) → Add zone → enter your root domain (e.g. `iac.com.ly`).
+
+**2. Update nameservers at your registrar**
+
+Point your domain to Hetzner's nameservers:
+
+```
+hydrogen.ns.hetzner.com
+oxygen.ns.hetzner.com
+helium.ns.hetzner.de
+```
+
+**3. Verify propagation**
+
+```bash
+dig NS iac.com.ly +short
+```
+
+Should return Hetzner's nameservers. Takes up to 10 minutes.
+
+**4. Add A record after deploy**
+
+After `pulumi up`, add an A record in Hetzner DNS pointing your domain to the Load Balancer IP:
+
+```bash
+pulumi stack output dnsNote
+```
 
 ## Setup
 
@@ -39,14 +73,6 @@ pulumi config set sshAllowedCidrs "[\"$(curl -s ifconfig.me)/32\"]"
 pulumi preview
 pulumi up
 ```
-
-After deploy, Pulumi will remind you what to do:
-
-```bash
-pulumi stack output dnsNote
-```
-
-Add an A record in Hetzner DNS ([dns.hetzner.com](https://dns.hetzner.com)) pointing your domain to the Load Balancer IP shown in the output.
 
 ## Verify
 
