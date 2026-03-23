@@ -1,0 +1,23 @@
+{
+  "name": "hetzner-tls-lb-pulumi",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hetzner Load Balancer with TLS termination using a managed certificate — Pulumi TypeScript",
+  "main": "index.ts",
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "preview": "pulumi preview",
+    "up": "pulumi up",
+    "destroy": "pulumi destroy",
+    "outputs": "pulumi stack output"
+  },
+  "dependencies": {
+    "@pulumi/hcloud": "^1.32.1",
+    "@pulumi/pulumi": "^3.225.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.5",
+    "typescript": "^5.9.3"
+  }
+}
