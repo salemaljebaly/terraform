@@ -1,0 +1,33 @@
+name: hetzner-tls-lb-pulumi
+description: Hetzner Load Balancer with TLS termination using a managed certificate — Pulumi TypeScript
+runtime:
+  name: nodejs
+  options:
+    packagemanager: npm
+    typescript: true
+backend:
+  url: file://~
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: typescript
+  hetzner-tls-lb-pulumi:location:
+    default: nbg1
+  hetzner-tls-lb-pulumi:networkZone:
+    default: eu-central
+  hetzner-tls-lb-pulumi:loadBalancerType:
+    default: lb11
+  hetzner-tls-lb-pulumi:serverType:
+    default: cx23
+  hetzner-tls-lb-pulumi:image:
+    default: ubuntu-24.04
+  hetzner-tls-lb-pulumi:networkCidr:
+    default: 10.44.0.0/16
+  hetzner-tls-lb-pulumi:privateSubnetCidr:
+    default: 10.44.10.0/24
+  hetzner-tls-lb-pulumi:loadBalancerPrivateIp:
+    default: 10.44.10.10
+  hetzner-tls-lb-pulumi:appPrivateIp1:
+    default: 10.44.10.11
+  hetzner-tls-lb-pulumi:appPrivateIp2:
+    default: 10.44.10.12

@@ -1,0 +1,59 @@
+#cloud-config
+
+write_files:
+  - path: /var/www/html/index.html
+    permissions: "0644"
+    owner: root:root
+    content: |
+      <html>
+        <head>
+          <title>${SERVER_NAME}</title>
+          <style>
+            body {
+              font-family: system-ui, sans-serif;
+              max-width: 760px;
+              margin: 40px auto;
+              padding: 0 16px;
+              line-height: 1.5;
+            }
+            code {
+              background: #f4f4f4;
+              padding: 2px 6px;
+              border-radius: 4px;
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Hello from ${SERVER_NAME}</h1>
+          <p>Traffic reached this server through the Hetzner Load Balancer over the private network.</p>
+          <p>Server: <code>${SERVER_NAME}</code></p>
+          <p>Private IP: <code>${SERVER_PRIVATE_IP}</code></p>
+        </body>
+      </html>
+  - path: /var/www/html/health
+    permissions: "0644"
+    owner: root:root
+    content: "ok"
+  - path: /etc/systemd/system/simple-web.service
+    permissions: "0644"
+    owner: root:root
+    content: |
+      [Unit]
+      Description=Simple Python HTTP server
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      WorkingDirectory=/var/www/html
+      ExecStart=/usr/bin/python3 -m http.server 80 --bind 0.0.0.0
+      Restart=always
+      RestartSec=2
+      User=root
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - systemctl enable simple-web.service
+  - systemctl restart simple-web.service
