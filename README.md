@@ -16,48 +16,60 @@ It is not tied to a single tool or provider. The repo includes labs and working 
 ### Hetzner Cloud
 
 #### 1) Hetzner Private LB + NAT (OpenTofu)
-- Path: `hetzner-private-lb-nat-tofu/`
+- Path: [`hetzner-private-lb-nat-tofu/`](hetzner-private-lb-nat-tofu/)
 - Focus: private application servers, NAT egress, public load balancer, firewall segmentation
 - Best for: production-style private networking on Hetzner Cloud
-- Entry docs: `hetzner-private-lb-nat-tofu/README.md`
+- Entry docs: [`hetzner-private-lb-nat-tofu/README.md`](hetzner-private-lb-nat-tofu/README.md)
 
 #### 2) Getting Started with Pulumi on Hetzner Cloud
-- Path: `hetzner-pulumi-intro/`
+- Path: [`hetzner-pulumi-intro/`](hetzner-pulumi-intro/)
 - Focus: first Pulumi + TypeScript deployment on Hetzner Cloud
 - Best for: beginners starting with Pulumi on Hetzner
-- Entry docs: `hetzner-pulumi-intro/README.md`
+- Entry docs: [`hetzner-pulumi-intro/README.md`](hetzner-pulumi-intro/README.md)
 
 #### 3) Private App Server Behind Load Balancer (Pulumi)
-- Path: `hetzner-private-lb-pulumi/`
+- Path: [`hetzner-private-lb-pulumi/`](hetzner-private-lb-pulumi/)
 - Focus: public load balancer, private app server, private networking, and firewall rules
 - Best for: a clean Pulumi follow-up after the basic Hetzner intro
-- Entry docs: `hetzner-private-lb-pulumi/README.md`
+- Entry docs: [`hetzner-private-lb-pulumi/README.md`](hetzner-private-lb-pulumi/README.md)
 
 #### 4) Queue Buffer on Hetzner Cloud (Pulumi)
-- Path: `queue-buffer-hetzner-pulumi/`
+- Path: [`queue-buffer-hetzner-pulumi/`](queue-buffer-hetzner-pulumi/)
 - Focus: RabbitMQ + worker + PostgreSQL pattern for absorbing traffic spikes
 - Best for: async processing and backend protection patterns
-- Entry docs: `queue-buffer-hetzner-pulumi/README.md`
+- Entry docs: [`queue-buffer-hetzner-pulumi/README.md`](queue-buffer-hetzner-pulumi/README.md)
 
 #### 5) YugabyteDB on Hetzner Cloud (Pulumi)
-- Path: `yugabyte-hetzner-pulumi/`
+- Path: [`yugabyte-hetzner-pulumi/`](yugabyte-hetzner-pulumi/)
 - Focus: distributed YugabyteDB cluster with private networking and scaling
 - Best for: database infrastructure and benchmark-oriented labs
-- Entry docs: `yugabyte-hetzner-pulumi/README.md`
+- Entry docs: [`yugabyte-hetzner-pulumi/README.md`](yugabyte-hetzner-pulumi/README.md)
 
 #### 6) YugabyteDB on K3s + Hetzner Cloud (Pulumi)
-- Path: `yugabyte-hetzner-k8s/`
+- Path: [`yugabyte-hetzner-k8s/`](yugabyte-hetzner-k8s/)
 - Focus: K3s, Hetzner Cloud, autoscaling, CSI/CCM, and YugabyteDB on Kubernetes
 - Best for: advanced platform and database experiments
-- Entry docs: `yugabyte-hetzner-k8s/README.md`
+- Entry docs: [`yugabyte-hetzner-k8s/README.md`](yugabyte-hetzner-k8s/README.md)
+
+#### 7) TLS Termination on Hetzner Load Balancer (Pulumi)
+- Path: [`hetzner-tls-lb-pulumi/`](hetzner-tls-lb-pulumi/)
+- Focus: Hetzner managed certificate (Let's Encrypt via DNS-01), HTTPS at the Load Balancer, HTTP→HTTPS redirect
+- Best for: production TLS with Hetzner DNS and no manual certificate management
+- Entry docs: [`hetzner-tls-lb-pulumi/README.md`](hetzner-tls-lb-pulumi/README.md)
+
+#### 8) Load Balancer with Cloudflare Origin Certificate (Pulumi)
+- Path: [`hetzner-cloudflare-lb-pulumi/`](hetzner-cloudflare-lb-pulumi/)
+- Focus: Cloudflare Origin Certificate uploaded to Hetzner LB, proxied DNS A record, nginx real-IP restoration via dynamic Cloudflare IP fetch
+- Best for: Cloudflare-proxied setups where TLS is handled by a Cloudflare Origin Certificate instead of Let's Encrypt
+- Entry docs: [`hetzner-cloudflare-lb-pulumi/README.md`](hetzner-cloudflare-lb-pulumi/README.md)
 
 ### AWS
 
-#### 7) AWS VPC Lab
-- Path: `aws-vpc-lab/`
+#### 9) AWS VPC Lab
+- Path: [`aws-vpc-lab/`](aws-vpc-lab/)
 - Focus: simple AWS VPC test configuration
 - Best for: basic AWS network lab work
-- Entry docs: `aws-vpc-lab/README.md`
+- Entry docs: [`aws-vpc-lab/README.md`](aws-vpc-lab/README.md)
 
 ## Tooling Overview
 
