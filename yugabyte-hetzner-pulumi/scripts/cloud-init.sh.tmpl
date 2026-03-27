@@ -51,7 +51,7 @@ runcmd:
       echo "Yugabyte download failed (attempt ${i}/20); retrying in 5s..." >&2
       sleep 5
     done
-    test -s /tmp/yugabyte.tar.gz
+    tar -tzf /tmp/yugabyte.tar.gz > /dev/null
     extracted="$(tar -tzf /tmp/yugabyte.tar.gz | head -1 | cut -d/ -f1)"
     tar -xzf /tmp/yugabyte.tar.gz -C /opt
     ln -sfn "/opt/${extracted}" /opt/yugabyte
