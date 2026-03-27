@@ -1,0 +1,33 @@
+name: hetzner-cloudflare-lb-pulumi
+description: Hetzner Load Balancer with TLS termination using a Cloudflare Origin Certificate — Pulumi TypeScript
+runtime:
+  name: nodejs
+  options:
+    packagemanager: npm
+    typescript: true
+backend:
+  url: file://~
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: typescript
+  hetzner-cloudflare-lb-pulumi:location:
+    default: nbg1
+  hetzner-cloudflare-lb-pulumi:networkZone:
+    default: eu-central
+  hetzner-cloudflare-lb-pulumi:loadBalancerType:
+    default: lb11
+  hetzner-cloudflare-lb-pulumi:serverType:
+    default: cx23
+  hetzner-cloudflare-lb-pulumi:image:
+    default: ubuntu-24.04
+  hetzner-cloudflare-lb-pulumi:networkCidr:
+    default: 10.44.0.0/16
+  hetzner-cloudflare-lb-pulumi:privateSubnetCidr:
+    default: 10.44.10.0/24
+  hetzner-cloudflare-lb-pulumi:loadBalancerPrivateIp:
+    default: 10.44.10.10
+  hetzner-cloudflare-lb-pulumi:appPrivateIp1:
+    default: 10.44.10.11
+  hetzner-cloudflare-lb-pulumi:appPrivateIp2:
+    default: 10.44.10.12
