@@ -27,6 +27,8 @@ Hetzner managed certificates require Hetzner DNS to be authoritative for your do
 
 Go to [dns.hetzner.com](https://dns.hetzner.com) → Add zone → enter your root domain (e.g. `iac.com.ly`).
 
+![Hetzner DNS zone creation](images/hetzner-dns-zone.png)
+
 **2. Update nameservers at your registrar**
 
 Point your domain to Hetzner's nameservers:
@@ -36,6 +38,8 @@ hydrogen.ns.hetzner.com
 oxygen.ns.hetzner.com
 helium.ns.hetzner.de
 ```
+
+![Registrar nameserver settings](images/registrar-nameservers.png)
 
 **3. Verify propagation**
 
@@ -48,6 +52,8 @@ Should return Hetzner's nameservers. Takes up to 10 minutes.
 **4. Add A record after deploy**
 
 After `pulumi up`, add an A record in Hetzner DNS pointing your domain to the Load Balancer IP:
+
+![Adding A record in Hetzner DNS](images/hetzner-dns-a-record.png)
 
 ```bash
 pulumi stack output dnsNote
