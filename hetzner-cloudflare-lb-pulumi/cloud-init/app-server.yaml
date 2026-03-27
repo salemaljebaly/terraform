@@ -1,0 +1,100 @@
+#cloud-config
+
+packages:
+  - nginx
+
+write_files:
+  - path: /var/www/html/index.html
+    permissions: "0644"
+    owner: root:root
+    content: |
+      <html>
+        <head>
+          <title>${SERVER_NAME}</title>
+          <style>
+            body {
+              font-family: system-ui, sans-serif;
+              max-width: 760px;
+              margin: 40px auto;
+              padding: 0 16px;
+              line-height: 1.5;
+            }
+            code {
+              background: #f4f4f4;
+              padding: 2px 6px;
+              border-radius: 4px;
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Hello from ${SERVER_NAME}</h1>
+          <p>Traffic reached this server through the Hetzner Load Balancer over the private network.</p>
+          <p>Server: <code>${SERVER_NAME}</code></p>
+          <p>Private IP: <code>${SERVER_PRIVATE_IP}</code></p>
+        </body>
+      </html>
+
+  - path: /var/www/html/health
+    permissions: "0644"
+    owner: root:root
+    content: "ok"
+
+  - path: /etc/nginx/conf.d/app.conf
+    permissions: "0644"
+    owner: root:root
+    content: |
+      server {
+          listen 80;
+          server_name _;
+
+          include /etc/nginx/cloudflare-real-ip.conf;
+          real_ip_header CF-Connecting-IP;
+
+          root /var/www/html;
+          index index.html;
+
+          location / {
+              try_files $uri $uri/ =404;
+          }
+
+          location /health {
+              try_files $uri =404;
+          }
+      }
+
+  - path: /usr/local/bin/update-cloudflare-ips
+    permissions: "0755"
+    owner: root:root
+    content: |
+      #!/bin/bash
+      # Fetches the latest Cloudflare IP ranges and updates the nginx real_ip config.
+      # Run on boot and weekly via cron to stay up to date.
+      set -euo pipefail
+
+      CONFIG_PATH=/etc/nginx/cloudflare-real-ip.conf
+      LB_IP=${SERVER_PRIVATE_IP}
+
+      : > "$CONFIG_PATH"
+
+      for type in v4 v6; do
+          curl -s "https://www.cloudflare.com/ips-$type" | \
+              sed 's/^/set_real_ip_from /; s/$/;/' | \
+              tee -a "$CONFIG_PATH" > /dev/null
+      done
+
+      echo "set_real_ip_from $LB_IP;" | tee -a "$CONFIG_PATH" > /dev/null
+
+      nginx -t && systemctl reload nginx
+
+  - path: /etc/cron.weekly/update-cloudflare-ips
+    permissions: "0755"
+    owner: root:root
+    content: |
+      #!/bin/bash
+      /usr/local/bin/update-cloudflare-ips
+
+runcmd:
+  - /usr/local/bin/update-cloudflare-ips
+  - rm -f /etc/nginx/sites-enabled/default
+  - systemctl enable nginx
+  - systemctl restart nginx

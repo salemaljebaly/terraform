@@ -1,0 +1,8 @@
+/bin/
+/node_modules/
+.env
+Pulumi.*.yaml
+!Pulumi.yaml
+!Pulumi.example.yaml
+*.js
+*.d.ts
