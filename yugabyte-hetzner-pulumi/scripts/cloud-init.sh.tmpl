@@ -14,6 +14,15 @@ write_files:
       vm.swappiness = 0
       vm.max_map_count = 262144
 
+  - path: /etc/security/limits.d/yugabytedb.conf
+    content: |
+      yugabyte  soft  nofile  1048576
+      yugabyte  hard  nofile  1048576
+      yugabyte  soft  nproc   12000
+      yugabyte  hard  nproc   12000
+      yugabyte  soft  core    unlimited
+      yugabyte  hard  core    unlimited
+
 runcmd:
   - timedatectl set-timezone UTC
   - sysctl --load /etc/sysctl.d/99-yugabytedb.conf

@@ -11,13 +11,13 @@ const namePrefix = config.get("namePrefix") ?? `${project}-${stack}`;
 const location = config.get("location") ?? "nbg1";
 const networkZone = config.get("networkZone") ?? "eu-central";
 const image = config.get("image") ?? "ubuntu-24.04";
-const serverType = config.get("serverType") ?? "cax11";
+const serverType = config.get("serverType") ?? "cax21";
 
 const networkCidr = config.get("networkCidr") ?? "10.30.0.0/16";
 const subnetCidr = config.get("subnetCidr") ?? "10.30.1.0/24";
 
 const sshAllowedCidr = config.get("sshAllowedCidr") ?? "0.0.0.0/0";
-const appServerType = config.get("appServerType") ?? "cax11";
+const appServerType = config.get("appServerType") ?? "cax21";
 const appPrivateIp = config.get("appPrivateIp") ?? "10.30.1.100";
 
 const existingSshKeyName = config.get("existingSshKeyName");
