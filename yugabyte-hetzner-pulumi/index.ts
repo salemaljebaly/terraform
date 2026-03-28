@@ -11,14 +11,14 @@ const namePrefix = config.get("namePrefix") ?? `${project}-${stack}`;
 const location = config.get("location") ?? "nbg1";
 const networkZone = config.get("networkZone") ?? "eu-central";
 const image = config.get("image") ?? "ubuntu-24.04";
-const serverType = config.get("serverType") ?? "cax11";
+const serverType = config.get("serverType") ?? "cax21";
 
 const networkCidr = config.get("networkCidr") ?? "10.30.0.0/16";
 const subnetCidr = config.get("subnetCidr") ?? "10.30.1.0/24";
 
 const sshAllowedCidr = config.get("sshAllowedCidr") ?? "0.0.0.0/0";
-const ysqlAllowedCidr = config.get("ysqlAllowedCidr") ?? sshAllowedCidr;
-const observabilityAllowedCidr = config.get("observabilityAllowedCidr") ?? sshAllowedCidr;
+const appServerType = config.get("appServerType") ?? "cax21";
+const appPrivateIp = config.get("appPrivateIp") ?? "10.30.1.100";
 
 const existingSshKeyName = config.get("existingSshKeyName");
 const sshPublicKeyPath = config.get("sshPublicKeyPath");
@@ -55,12 +55,6 @@ if (!isAarch64Url && isArmServerType) {
 
 if (sshAllowedCidr === "0.0.0.0/0") {
   pulumi.log.warn("sshAllowedCidr is 0.0.0.0/0 — SSH port 22 is open to the entire internet. Set sshAllowedCidr to restrict access.");
-}
-if (ysqlAllowedCidr === "0.0.0.0/0") {
-  pulumi.log.warn("ysqlAllowedCidr is 0.0.0.0/0 — YSQL port 5433 is open to the entire internet. Set ysqlAllowedCidr to restrict access.");
-}
-if (observabilityAllowedCidr === "0.0.0.0/0") {
-  pulumi.log.warn("observabilityAllowedCidr is 0.0.0.0/0 — YugabyteDB web UIs and YCQL port 9042 are open to the entire internet. Set observabilityAllowedCidr to restrict access.");
 }
 
 const sshPublicKey = sshPublicKeyPath
@@ -115,18 +109,18 @@ const firewall = new hcloud.Firewall(`${namePrefix}-firewall`, {
       sourceIps: [sshAllowedCidr],
     },
     {
-      description: "YSQL client access",
+      description: "YSQL from private network only",
       direction: "in",
       protocol: "tcp",
       port: "5433",
-      sourceIps: [ysqlAllowedCidr],
+      sourceIps: [subnetCidr],
     },
     {
-      description: "YugabyteDB web UIs (7000/9000), YCQL (9042), and intra-cluster RPC (7100/9100)",
+      description: "YugabyteDB web UIs and YCQL from private network only",
       direction: "in",
       protocol: "tcp",
       port: "7000-9000",
-      sourceIps: [observabilityAllowedCidr],
+      sourceIps: [subnetCidr],
     },
     {
       description: "Private cluster RPC traffic",
@@ -139,6 +133,35 @@ const firewall = new hcloud.Firewall(`${namePrefix}-firewall`, {
 });
 const firewallId = firewall.id.apply((id) => Number(id));
 
+// App server firewall — HTTP open to internet, DB ports not present here.
+const appFirewall = new hcloud.Firewall(`${namePrefix}-app-firewall`, {
+  name: `${namePrefix}-app-firewall`,
+  labels,
+  rules: [
+    {
+      description: "ICMP from anywhere",
+      direction: "in",
+      protocol: "icmp",
+      sourceIps: ["0.0.0.0/0", "::/0"],
+    },
+    {
+      description: "HTTP from anywhere",
+      direction: "in",
+      protocol: "tcp",
+      port: "80",
+      sourceIps: ["0.0.0.0/0", "::/0"],
+    },
+    {
+      description: "SSH access",
+      direction: "in",
+      protocol: "tcp",
+      port: "22",
+      sourceIps: [sshAllowedCidr],
+    },
+  ],
+});
+const appFirewallId = appFirewall.id.apply((id) => Number(id));
+
 const sshKeyRef: pulumi.Input<string> = existingSshKeyName
   ? existingSshKeyName
   : new hcloud.SshKey(`${namePrefix}-ssh-key`, {
@@ -148,6 +171,7 @@ const sshKeyRef: pulumi.Input<string> = existingSshKeyName
     }).id;
 
 const cloudInitTemplate = fs.readFileSync(path.join(__dirname, "scripts", "cloud-init.sh.tmpl"), "utf-8");
+const appServerTemplate = fs.readFileSync(path.join(__dirname, "scripts", "app-server.yaml"), "utf-8");
 
 interface NodeSpec {
   name: string;
@@ -210,6 +234,23 @@ const servers = nodeSpecs.map((spec) => {
   );
 });
 
+// --- App server ---
+// Sits on the private network alongside DB nodes.
+// HTTP (port 80) is open to the internet; DB ports are unreachable from outside.
+
+const appServer = new hcloud.Server(`${namePrefix}-app`, {
+  name: `${namePrefix}-app`,
+  location,
+  image,
+  serverType: appServerType,
+  firewallIds: [appFirewallId],
+  labels: { ...labels, tier: "app" },
+  sshKeys: [sshKeyRef],
+  publicNets: [{ ipv4Enabled: true, ipv6Enabled: false }],
+  networks: [{ networkId: privateNetworkId, ip: appPrivateIp }],
+  userData: appServerTemplate.replaceAll("__DB_HOST__", bootstrapIp),
+}, { dependsOn: [privateSubnet, ...servers] });
+
 const publicNode = servers[0];
 
 export const publicIpv4 = publicNode.ipv4Address;
@@ -226,3 +267,8 @@ export const privateIps = pulumi.all(servers.map((s) => s.networks)).apply((allN
 export const sshToPublicNode = pulumi.interpolate`ssh root@${publicNode.ipv4Address}`;
 export const ysqlConnection = pulumi.interpolate`postgresql://yugabyte@${nodeSpecs[0].privateIp}:5433/yugabyte`;
 export const ysqlSshTunnel = pulumi.interpolate`ssh -L 5433:${nodeSpecs[0].privateIp}:5433 root@${publicNode.ipv4Address}`;
+export const appPublicIp = appServer.ipv4Address;
+export const appUrl = pulumi.interpolate`http://${appServer.ipv4Address}`;
+export const appHealthUrl = pulumi.interpolate`http://${appServer.ipv4Address}/health`;
+export const sshToApp = pulumi.interpolate`ssh root@${appServer.ipv4Address}`;
+export const benchmarkCmd = pulumi.interpolate`ssh root@${appServer.ipv4Address} 'pgbench -h ${bootstrapIp} -p 5433 -U yugabyte -c 32 -j 8 -T 120 yugabyte'`;

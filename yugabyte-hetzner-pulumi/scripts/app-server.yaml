@@ -1,0 +1,128 @@
+#cloud-config
+
+packages:
+  - nodejs
+  - npm
+  - postgresql-16
+
+write_files:
+  - path: /opt/app/package.json
+    permissions: "0644"
+    owner: root:root
+    content: |
+      {
+        "name": "yugabyte-demo-app",
+        "version": "1.0.0",
+        "dependencies": {
+          "express": "4.19.2",
+          "pg": "8.12.0"
+        }
+      }
+
+  - path: /opt/app/app.js
+    permissions: "0644"
+    owner: root:root
+    content: |
+      'use strict';
+      const express = require('express');
+      const { Pool } = require('pg');
+
+      const DB_HOST = process.env.DB_HOST || '10.30.1.11';
+      const pool = new Pool({
+        host: DB_HOST,
+        port: 5433,
+        database: 'yugabyte',
+        user: 'yugabyte',
+        ssl: false,
+        max: 20,
+        connectionTimeoutMillis: 5000,
+      });
+
+      const app = express();
+      app.use(express.json());
+
+      async function initDb() {
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS events (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            payload TEXT NOT NULL
+          )
+        `);
+      }
+
+      app.get('/health', (_req, res) => res.json({ status: 'ok', db: DB_HOST }));
+
+      app.get('/db/ping', async (_req, res) => {
+        try {
+          const { rows } = await pool.query('SELECT version()');
+          res.json({ version: rows[0].version });
+        } catch (err) {
+          res.status(503).json({ error: err.message });
+        }
+      });
+
+      app.post('/events', async (req, res) => {
+        try {
+          const payload = req.body?.payload ?? 'ping';
+          const { rows } = await pool.query(
+            'INSERT INTO events (payload) VALUES ($1) RETURNING *',
+            [payload]
+          );
+          res.status(201).json(rows[0]);
+        } catch (err) {
+          res.status(500).json({ error: err.message });
+        }
+      });
+
+      app.get('/events/count', async (_req, res) => {
+        try {
+          const { rows } = await pool.query('SELECT COUNT(*)::int AS count FROM events');
+          res.json(rows[0]);
+        } catch (err) {
+          res.status(503).json({ error: err.message });
+        }
+      });
+
+      app.listen(80, () => console.log('API listening on :80, DB_HOST=' + DB_HOST));
+
+      // Retry DB init — cluster may still be bootstrapping when app starts.
+      (function tryInit(left) {
+        initDb()
+          .then(() => console.log('DB schema ready'))
+          .catch(err => {
+            if (left > 0) {
+              console.error('DB init failed (' + left + ' left): ' + err.message);
+              setTimeout(() => tryInit(left - 1), 5000);
+            } else {
+              console.error('DB init failed, giving up');
+            }
+          });
+      }(60));
+
+  - path: /etc/systemd/system/yugabyte-app.service
+    permissions: "0644"
+    owner: root:root
+    content: |
+      [Unit]
+      Description=YugabyteDB Demo API
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      WorkingDirectory=/opt/app
+      Environment=DB_HOST=__DB_HOST__
+      ExecStart=/usr/bin/node /opt/app/app.js
+      Restart=always
+      RestartSec=5
+      StandardOutput=journal
+      StandardError=journal
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - cd /opt/app && npm install --production 2>&1 | tee /var/log/app-install.log
+  - systemctl daemon-reload
+  - systemctl enable --now yugabyte-app
